@@ -1,0 +1,1566 @@
+REPORT  YKK_PRJ_REP NO STANDARD PAGE HEADING
+                                   LINE-SIZE 170
+                                   LINE-COUNT 58
+                                   MESSAGE-ID ZPSDVRP..
+TABLES: PROJ,PRPS.
+*-----------------------------------------------------------------------
+* T Y P E S
+*-----------------------------------------------------------------------
+TYPES:
+  BEGIN OF _PROJ,
+    VBUKR TYPE PS_VBUKR,
+    VKOKR TYPE PS_VKOKR,
+    PSPNR TYPE PS_INTNR,
+    PSPID TYPE PS_PSPID,
+    POST1 TYPE PS_POST1,
+    PLSEZ TYPE PS_PLSEZ,
+    OBJNR TYPE J_OBJNR,
+  END OF _PROJ,
+
+  BEGIN OF _PRPS,
+    PSPNR TYPE PS_POSNR,
+    POSID TYPE PS_POSID,
+    POSKI TYPE PS_POSKI,
+    PRCTR TYPE PRCTR,
+    PRART TYPE PS_PRART,
+    POST1 TYPE PS_POST1,
+    PSPHI TYPE PS_PSPHI,
+    OBJNR TYPE J_OBJNR,
+    USR00 TYPE USR00PRPS,
+    ERDAT TYPE ERDAT,
+    STUFE TYPE PS_STUFE,
+  END OF _PRPS,
+
+  BEGIN OF _RPSCO,
+    OBJNR TYPE J_OBJNR,
+    WRTTP TYPE CO_WRTTP,
+    GJAHR TYPE GJAHR,
+    VORGA TYPE BP_VORGANG,
+    VERSN TYPE BP_VERSION,
+    BELTP TYPE BP_INOUT,
+    WLP00 TYPE BP_WPL,
+  END OF _RPSCO,
+
+  BEGIN OF _OUTPUT,
+    PROJ_PSPID TYPE PS_PSPID,
+    PROJ_POST1 TYPE PS_POST1,
+    PROJ_PLSEZ TYPE PS_PLSEZ,
+    SLS_PRICE  TYPE BP_WPL,
+    PRPS_USR00 TYPE USR00PRPS,
+    POSID      TYPE PS_POSID,
+    PRPS_POST1 TYPE PS_POST1,
+    ORIG_COST  TYPE BP_WPL,
+    CURR_BUDG  TYPE BP_WPL,
+    END_COST   TYPE BP_WPL,
+    ORDR_COST  TYPE BP_WPL,
+    ACTL_COST  TYPE BP_WPL,
+    ORDR_PERC(20)  TYPE C,
+    CURR_ACTL  TYPE BP_WPL,
+    STATUS     TYPE J_INACT,
+    PROJ_TYPE  TYPE PS_PRATX,
+    COMP_NAME  TYPE NAME_1,
+    TASK_STAT  TYPE J_STEXT,
+    PROJ_STAT  TYPE J_STEXT,
+    TASK_DATE  TYPE ERDAT,
+    VBUKR TYPE PS_VBUKR,
+    VKOKR TYPE PS_VKOKR,
+    PSPNR TYPE PS_INTNR,
+    PRPS_POSKI TYPE PS_POSKI,
+    PRCTR TYPE PRCTR,
+    PSPHI TYPE PS_PSPHI,
+    OBJNR TYPE J_OBJNR,
+    KUNNR TYPE NAME1_GP,
+    PARVW TYPE VTXTK,
+  END OF _OUTPUT.
+CONSTANTS:C_MESS_CL   TYPE SY-MSGID        VALUE 'ZPSDVRP',
+          C_E         TYPE BAPIRETURN-TYPE VALUE 'E',
+          C_A         TYPE BAPIRETURN-TYPE VALUE 'A',
+          C_I         TYPE BAPIRETURN-TYPE VALUE 'I',
+          C_X         TYPE C               VALUE 'X',
+          C_W         TYPE BAPIRETURN-TYPE VALUE 'W',
+          C_YES       TYPE C               VALUE 'X',
+          C_NO        TYPE C               VALUE '',
+          C_CSV(5)                         VALUE '*.CSV',
+          C_SEP       TYPE C               VALUE ',',
+          C_PERIOD    TYPE C               VALUE '.',
+          C_COMMA     TYPE C               VALUE ',',
+          C_1         TYPE C               VALUE '1',
+          C_%(1)      TYPE C               VALUE '%',
+          C_01(2)     TYPE C               VALUE '01',
+          C_21(2)     TYPE C               VALUE '21',
+          C_02(2)     TYPE C               VALUE '02',
+          C_04(2)     TYPE C               VALUE '04',
+          C_22(2)     TYPE C               VALUE '22',
+          C_42(2)     TYPE C               VALUE '42',
+          C_2         TYPE C               VALUE '2',
+          C_001(3)                         VALUE '001',
+          C_002(3)                         VALUE '002',
+          C_I0067(5)                       VALUE 'I0067',
+          C_I0043(5)                       VALUE 'I0043',
+          C_I0045(5)                       VALUE 'I0045',
+          C_I0046(5)                       VALUE 'I0046',
+          C_ZERO(3)   TYPE C               VALUE '000',
+          C_0000(4)   TYPE C               VALUE '0000',
+          C_NUMC(4)                        VALUE 'NUMC',
+          C_KSTR(4)   TYPE C               VALUE 'KSTR',
+          C_KSTP(4)   TYPE C               VALUE 'KSTP'.
+*----------------------------------------------------------------------*
+* SELECTION-SCREEN
+*----------------------------------------------------------------------*
+
+SELECTION-SCREEN BEGIN OF SCREEN 100.
+SELECTION-SCREEN BEGIN OF BLOCK SELECTION
+                        WITH FRAME TITLE TEXT-001.
+PARAMETERS:
+  P_VBUKR   TYPE PROJ-VBUKR OBLIGATORY,
+  P_VKOKR   TYPE PROJ-VKOKR OBLIGATORY,
+  P_STAT    TYPE JEST-STAT.
+
+SELECT-OPTIONS:
+  S_PSPID   FOR PROJ-PSPID,
+  S_POSID   FOR PRPS-POSID,
+  S_POSKI   FOR PRPS-POSKI,
+  S_PRCTR   FOR PRPS-PRCTR,
+  S_PRART   FOR PRPS-PRART.
+SELECTION-SCREEN END OF BLOCK SELECTION.
+
+SELECTION-SCREEN BEGIN OF BLOCK DOWNLOAD
+                          WITH FRAME TITLE TEXT-002.
+PARAMETERS:
+  P_EXPATH TYPE RLGRAP-FILENAME.
+SELECTION-SCREEN END OF BLOCK DOWNLOAD.
+SELECTION-SCREEN END OF SCREEN 100.
+
+INCLUDE  ZCLASS_LOG_UTILITY.
+
+CLASS CL_VIEW DEFINITION.
+  PUBLIC SECTION.
+    METHODS:
+      DISPLAY_GRID IMPORTING T_OP TYPE STANDARD TABLE,
+
+      F4_HELP_FILENAME CHANGING VALUE(EXPATH) TYPE RLGRAP-FILENAME,
+      GET_PARAMS EXPORTING
+                  VALUE(VBUKR) TYPE PROJ-VBUKR
+                  VALUE(VKOKR) TYPE PROJ-VKOKR
+                  VALUE(STAT)  TYPE JEST-STAT
+                  VALUE(EXPATH) TYPE RLGRAP-FILENAME
+                  VALUE(PSPID) TYPE RSELOPTION
+                  VALUE(POSID) TYPE RSELOPTION
+                  VALUE(POSKI) TYPE RSELOPTION
+                  VALUE(PRCTR) TYPE RSELOPTION
+                  VALUE(PRART) TYPE RSELOPTION ,
+      SAVE_FILE EXPORTING VALUE(T_LOG) TYPE BAPIRET2_T ,
+      VALIDATE_FILENAME EXPORTING VALUE(T_LOG) TYPE BAPIRET2_T,
+      WRITE_LOG IMPORTING VALUE(EXPATH) TYPE RLGRAP-FILENAME
+                EXPORTING VALUE(T_LOG) TYPE BAPIRET2_T .
+
+    DATA:
+      R_GRID     TYPE REF TO CL_SALV_TABLE,
+      T_OUTPUT   TYPE TABLE OF _OUTPUT,
+      I_RESULT   TYPE TABLE OF SOLISTI1.
+  PRIVATE SECTION.
+    METHODS:  BUILD_GRID,
+              CREATE_CSV_HDR,
+              CREATE_GRID,
+              CREATE_HEADER,
+              EDIT_COLUMNS,
+              GET_FUNCTIONS.
+ENDCLASS.
+
+CLASS CL_VIEW IMPLEMENTATION.
+
+  METHOD F4_HELP_FILENAME.
+    CALL FUNCTION 'KD_GET_FILENAME_ON_F4'
+      EXPORTING
+        PROGRAM_NAME  = SYST-REPID
+        DYNPRO_NUMBER = SYST-DYNNR
+        FIELD_NAME    = EXPATH
+*       STATIC        = ' '
+*       MASK          = ' '
+*       FILEOPERATION = 'R'
+      CHANGING
+        FILE_NAME     = EXPATH
+*       LOCATION_FLAG = 'P'
+      EXCEPTIONS
+        MASK_TOO_LONG = 1
+        OTHERS        = 2.
+    IF SY-SUBRC <> 0.
+    ELSE.
+      IF EXPATH IS NOT INITIAL.
+        TRANSLATE EXPATH TO UPPER CASE.                   "#EC SYNTCHAR
+        IF EXPATH CP C_CSV.
+        ELSE.
+          CONCATENATE EXPATH C_CSV INTO EXPATH.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+  ENDMETHOD.
+  METHOD VALIDATE_FILENAME.
+    CONSTANTS:
+      C_CSV2(3)    VALUE 'CSV'.
+    DATA:
+      LV_DIR     TYPE STRING,     " For Directory
+      LV_BOL     TYPE ABAP_BOOL,  " Result
+      LV_FNAME   TYPE STRING,     " File Name
+      LV_FNAME1  TYPE STRING,     " File Name
+      LV_ERR_MESS TYPE SYMSGV,
+      LV_EXT     TYPE STRING.     " File Extension
+
+
+    CALL FUNCTION 'SO_SPLIT_FILE_AND_PATH'
+      EXPORTING
+        FULL_NAME     = P_EXPATH
+      IMPORTING
+        STRIPPED_NAME = LV_FNAME
+        FILE_PATH     = LV_DIR
+      EXCEPTIONS
+        X_ERROR       = 1
+        OTHERS        = 2.
+    IF SY-SUBRC <> 0.
+      LCL_LOG_UTILITY=>POPULATE_LOG( EXPORTING
+                                       I_TYPE   = C_I
+                                       I_CL     = C_MESS_CL
+                                       I_NUMBER = 003
+                                       I_PAR1   = SY-MSGV1
+                                       I_PAR2   = SY-MSGV2
+                                       I_PAR3   = SY-MSGV3
+                                       I_PAR4   = SY-MSGV4
+                                     CHANGING
+                                       C_LOG    = T_LOG ).
+    ENDIF.
+
+    CALL METHOD CL_GUI_FRONTEND_SERVICES=>DIRECTORY_EXIST
+      EXPORTING
+        DIRECTORY            = LV_DIR
+      RECEIVING
+        RESULT               = LV_BOL
+      EXCEPTIONS
+        CNTL_ERROR           = 1
+        ERROR_NO_GUI         = 2
+        WRONG_PARAMETER      = 3
+        NOT_SUPPORTED_BY_GUI = 4
+        OTHERS               = 5.
+    IF SY-SUBRC = 0.
+    ELSE.
+      IF LV_BOL IS INITIAL.
+        LV_ERR_MESS = LV_DIR.
+        LCL_LOG_UTILITY=>POPULATE_LOG( EXPORTING
+                                         I_TYPE   = C_E
+                                         I_CL     = C_MESS_CL
+                                         I_NUMBER = 015
+                                         I_PAR1   = LV_ERR_MESS
+                                       CHANGING
+                                         C_LOG    = T_LOG ).
+      ELSE.
+        TRANSLATE LV_FNAME TO UPPER CASE.                 "#EC SYNTCHAR
+        SPLIT LV_FNAME AT '.' INTO LV_FNAME1 LV_EXT.
+        IF LV_EXT IS INITIAL.
+          LV_ERR_MESS = LV_DIR.
+          LCL_LOG_UTILITY=>POPULATE_LOG( EXPORTING
+                                           I_TYPE   = C_E
+                                           I_CL     = C_MESS_CL
+                                           I_NUMBER = 016
+                                         CHANGING
+                                           C_LOG    = T_LOG ).
+        ELSE.
+          IF LV_EXT CP C_CSV OR LV_EXT EQ C_CSV2.
+
+          ELSE.
+            LV_ERR_MESS = LV_EXT.
+            LCL_LOG_UTILITY=>POPULATE_LOG( EXPORTING
+                                             I_TYPE   = C_E
+                                             I_CL     = C_MESS_CL
+                                             I_NUMBER = 017
+                                             I_PAR1   = LV_ERR_MESS
+                                           CHANGING
+                                             C_LOG    = T_LOG ).
+
+          ENDIF.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+  ENDMETHOD.
+  METHOD BUILD_GRID.
+    EDIT_COLUMNS( ).
+    GET_FUNCTIONS( ).
+    CREATE_HEADER( ).
+  ENDMETHOD.
+  METHOD CREATE_CSV_HDR.
+
+    FIELD-SYMBOLS:
+      <FS_RESULT> TYPE SOLISTI1.
+
+    APPEND INITIAL LINE TO I_RESULT ASSIGNING <FS_RESULT>.
+    CONCATENATE
+      'Project'
+      'Project Description'
+      'Task'
+      'Task Description'
+      'Partner Function'
+      'Customer'
+      'Department Total Code'
+      'Original Cost'
+      'Current Budget'
+      'Ordered Cost'
+      'Actual Cost'
+      'Projected End Cost'
+      'Division'
+      'Snapshot Date'
+      'Project Status'
+      'Task Status'
+      'Task Date' INTO <FS_RESULT>-LINE SEPARATED BY C_SEP.
+
+  ENDMETHOD.
+  METHOD CREATE_GRID.
+    TRY.
+        CL_SALV_TABLE=>FACTORY( IMPORTING
+                                  R_SALV_TABLE = R_GRID
+                                CHANGING
+                                  T_TABLE = T_OUTPUT ).
+      CATCH CX_SALV_MSG.
+    ENDTRY.
+  ENDMETHOD.
+  METHOD CREATE_HEADER.
+
+    DATA:
+      LR_CONTENT_HDR TYPE REF TO CL_SALV_FORM_ELEMENT,
+      LR_CONTENT TYPE REF TO CL_SALV_FORM_ELEMENT,
+      LR_HEADER  TYPE REF TO CL_SALV_FORM_HEADER_INFO,
+      LR_LAYOUT_DATA_GRID TYPE REF TO CL_SALV_FORM_LAYOUT_DATA_GRID,
+      LR_LAYOUT_LABEL_GRID TYPE REF TO CL_SALV_FORM_LAYOUT_DATA_GRID,
+      L_TEXT     TYPE STRING,
+      LR_GRID    TYPE REF TO CL_SALV_FORM_LAYOUT_GRID,
+      LR_GRID_1  TYPE REF TO CL_SALV_FORM_LAYOUT_GRID,
+      LR_GRID_2  TYPE REF TO CL_SALV_FORM_LAYOUT_GRID,
+      LR_LABEL   TYPE REF TO CL_SALV_FORM_LABEL,
+      V_LINES    TYPE I,
+      LR_TEXT    TYPE REF TO CL_SALV_FORM_TEXT.
+
+    DATA:
+      S_OUTPUT  TYPE _OUTPUT.
+
+    READ TABLE T_OUTPUT INTO S_OUTPUT INDEX 1.
+
+
+    CREATE OBJECT LR_GRID.
+    LR_GRID->CREATE_HEADER_INFORMATION( ROW     = 1
+                                        COLUMN  = 2
+                                        TEXT    = 'V_COMPANY_NAME' ).
+    "colspan = 2 ).
+    LR_GRID_1 = LR_GRID->CREATE_GRID(
+                                      ROW    = 2
+                                      COLUMN = 1 ).
+
+
+    LR_LABEL = LR_GRID_1->CREATE_LABEL( ROW     = 2
+                                        COLUMN  = 1
+                                        TEXT    = 'Report Name: ' ).
+    LR_LAYOUT_LABEL_GRID ?= LR_LABEL->GET_LAYOUT_DATA( ).
+    LR_LAYOUT_LABEL_GRID->SET_WIDTH( '20' ).
+
+    LR_GRID_1->CREATE_TEXT( ROW     = 2
+                            COLUMN  = 6
+                            TEXT    = ' ' ).
+    LR_TEXT = LR_GRID_1->CREATE_TEXT( ROW     = 2
+                                       COLUMN  = 2
+                                       TEXT    = SY-REPID
+                                       TOOLTIP = 'Report Name' ).
+
+    LR_LABEL = LR_GRID_1->CREATE_LABEL( ROW     = 3
+                                        COLUMN  = 1
+                                        TEXT    = 'Run Date: ' ).
+
+    LR_TEXT = LR_GRID_1->CREATE_TEXT( ROW     = 3
+                                      COLUMN  = 2
+                                      TEXT    = SY-DATUM
+                                      TOOLTIP = 'Run Date' ).
+*    lr_label->set_label_for( lr_text ).
+    LR_LABEL = LR_GRID_1->CREATE_LABEL( ROW     = 4
+                                        COLUMN  = 1
+                                        TEXT    = 'Run Time: ' ).
+
+    LR_TEXT = LR_GRID_1->CREATE_TEXT( ROW     = 4
+                                      COLUMN  = 2
+                                      TEXT    = SY-UZEIT
+                                      TOOLTIP = 'Run Time' ).
+
+    LR_LABEL = LR_GRID_1->CREATE_LABEL( ROW     = 4
+                                        COLUMN  = 3
+                                        TEXT    = 'Beginning Project: ' ).
+
+    LR_TEXT = LR_GRID_1->CREATE_TEXT( ROW     = 4
+                                      COLUMN  = 4
+                                      TEXT    = S_OUTPUT-PROJ_PSPID
+                                      TOOLTIP = 'Project' ).
+
+    LR_LABEL = LR_GRID_1->CREATE_LABEL( ROW     = 5
+                                        COLUMN  = 1
+                                        TEXT    = 'Project Type: ' ).
+
+
+    LR_TEXT = LR_GRID_1->CREATE_TEXT( ROW     = 5
+                                      COLUMN  = 2
+                                      TEXT    = S_OUTPUT-PROJ_TYPE
+                                      TOOLTIP = 'Project Type' ).
+
+
+    DESCRIBE TABLE T_OUTPUT LINES V_LINES.
+    READ TABLE T_OUTPUT INTO S_OUTPUT INDEX V_LINES.
+    LR_LABEL = LR_GRID_1->CREATE_LABEL( ROW     = 5
+                                        COLUMN  = 3
+                                        TEXT    = 'Ending Project: ' ).
+
+    LR_TEXT = LR_GRID_1->CREATE_TEXT( ROW     = 5
+                                      COLUMN  = 4
+                                      TEXT    = S_OUTPUT-PROJ_PSPID
+                                      TOOLTIP = 'Project' ).
+
+    LR_CONTENT = LR_GRID.
+    R_GRID->SET_TOP_OF_LIST( LR_CONTENT ).
+
+  ENDMETHOD.
+  METHOD DISPLAY_GRID.
+    T_OUTPUT[] = T_OP[].
+    CREATE_GRID( ).
+    BUILD_GRID( ).
+    R_GRID->DISPLAY( ).
+
+  ENDMETHOD.
+  METHOD EDIT_COLUMNS.
+    DATA:
+      COLUMNS TYPE REF TO CL_SALV_COLUMNS_TABLE,
+      COLUMN  TYPE REF TO CL_SALV_COLUMN.
+
+    TRY .
+        COLUMNS = R_GRID->GET_COLUMNS( ).
+
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'PROJ_PSPID' ).
+        COLUMN->SET_OUTPUT_LENGTH( '12' ).
+        COLUMN->SET_LONG_TEXT( 'Order #' ).
+        COLUMN->SET_MEDIUM_TEXT( 'Order #' ).
+        COLUMN->SET_SHORT_TEXT( 'Order #' ).
+
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'PROJ_POST1' ).
+        COLUMN->SET_LONG_TEXT( 'Project' ).
+        COLUMN->SET_MEDIUM_TEXT( 'Project' ).
+        COLUMN->SET_SHORT_TEXT( 'Project' ).
+
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'PROJ_PLSEZ' ).
+        COLUMN->SET_OUTPUT_LENGTH( '12' ).
+        COLUMN->SET_LONG_TEXT( 'Project End Date' ).
+        COLUMN->SET_MEDIUM_TEXT( 'Proj End Dt.' ).
+        COLUMN->SET_SHORT_TEXT( 'Proj End' ).
+
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'SLS_PRICE' ).
+        COLUMN->SET_OUTPUT_LENGTH( '16' ).
+        COLUMN->SET_LONG_TEXT( 'Sales Price' ).
+        COLUMN->SET_MEDIUM_TEXT( 'Sales Price' ).
+        COLUMN->SET_SHORT_TEXT( 'Sles Price' ).
+
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'PRPS_USR00' ).
+        COLUMN->SET_OUTPUT_LENGTH( '7' ).
+        COLUMN->SET_LONG_TEXT( 'Dept Code' ).
+        COLUMN->SET_MEDIUM_TEXT( 'Dept Code' ).
+        COLUMN->SET_SHORT_TEXT( 'Dept Code' ).
+
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'POSID' ).
+        COLUMN->SET_OUTPUT_LENGTH( '12' ).
+        COLUMN->SET_LONG_TEXT( 'Task #' ).
+        COLUMN->SET_MEDIUM_TEXT( 'Task #' ).
+        COLUMN->SET_SHORT_TEXT( 'Task #' ).
+
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'PRPS_POST1' ).
+        COLUMN->SET_OPTIMIZED( ).
+        COLUMN->SET_LONG_TEXT( 'Task Description' ).
+        COLUMN->SET_MEDIUM_TEXT( 'Task Descrpt' ).
+        COLUMN->SET_SHORT_TEXT( 'Task Des.' ).
+
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'ORIG_COST' ).
+        COLUMN->SET_OPTIMIZED( ).
+        COLUMN->SET_LONG_TEXT( 'Original Cost' ).
+        COLUMN->SET_MEDIUM_TEXT( 'Orig Cost' ).
+        COLUMN->SET_SHORT_TEXT( 'Orig Cost' ).
+
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'CURR_BUDG' ).
+        COLUMN->SET_OPTIMIZED( ).
+        COLUMN->SET_LONG_TEXT( 'Current Budget' ).
+        COLUMN->SET_MEDIUM_TEXT( 'Currnt Budgt' ).
+        COLUMN->SET_SHORT_TEXT( 'Curr. Budg' ).
+
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'END_COST' ).
+        COLUMN->SET_OPTIMIZED( ).
+        COLUMN->SET_LONG_TEXT( 'Project End Cost' ).
+        COLUMN->SET_MEDIUM_TEXT( 'Proj End Cost' ).
+        COLUMN->SET_SHORT_TEXT( 'Proj End' ).
+
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'ORDR_COST' ).
+        COLUMN->SET_OPTIMIZED( ).
+        COLUMN->SET_LONG_TEXT( 'Ordered Cost' ).
+        COLUMN->SET_MEDIUM_TEXT( 'Ordered Cost' ).
+        COLUMN->SET_SHORT_TEXT( 'Ordr Cost' ).
+
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'ACTL_COST ' ).
+        COLUMN->SET_OPTIMIZED( ).
+        COLUMN->SET_LONG_TEXT( 'Actual Cost' ).
+        COLUMN->SET_MEDIUM_TEXT( 'Actual Cost' ).
+        COLUMN->SET_SHORT_TEXT( 'Act. Cost' ).
+
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'ORDR_PERC' ).
+        COLUMN->SET_ALIGNMENT( CL_SALV_COLUMN=>RIGHT ).
+        COLUMN->SET_OPTIMIZED( ).
+        COLUMN->SET_LONG_TEXT( 'Ordered cx_salv_not_found' ).
+        COLUMN->SET_SHORT_TEXT( 'Ordered %' ).
+
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'CURR_ACTL' ).
+        COLUMN->SET_OPTIMIZED( ).
+        COLUMN->SET_LONG_TEXT( 'Current Budget less Cost' ).
+        COLUMN->SET_MEDIUM_TEXT( 'Budget less Cost' ).
+        COLUMN->SET_SHORT_TEXT( 'Budg. Cost' ).
+
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'TASK_STAT' ).
+        COLUMN->SET_OPTIMIZED( ).
+        COLUMN->SET_OUTPUT_LENGTH( '6' ).
+        COLUMN->SET_LONG_TEXT( 'Status' ).
+        COLUMN->SET_MEDIUM_TEXT( 'Status' ).
+        COLUMN->SET_SHORT_TEXT( 'Status' ).
+
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'PROJ_TYPE' ).
+        COLUMN->SET_VISIBLE( ' ' ).
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'COMP_NAME' ).
+        COLUMN->SET_VISIBLE( ' ' ).
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'STATUS' ).
+        COLUMN->SET_VISIBLE( ' ' ).
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'PROJ_STAT' ).
+        COLUMN->SET_VISIBLE( ' ' ).
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'TASK_DATE' ).
+        COLUMN->SET_VISIBLE( ' ' ).
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'VBUKR' ).
+        COLUMN->SET_VISIBLE( ' ' ).
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'VKOKR' ).
+        COLUMN->SET_VISIBLE( ' ' ).
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'PSPNR' ).
+        COLUMN->SET_VISIBLE( ' ' ).
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'PRPS_POSKI' ).
+        COLUMN->SET_VISIBLE( ' ' ).
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'PRCTR ' ).
+        COLUMN->SET_VISIBLE( ' ' ).
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'PSPHI' ).
+        COLUMN->SET_VISIBLE( ' ' ).
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'OBJNR' ).
+        COLUMN->SET_VISIBLE( ' ' ).
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'KUNNR' ).
+        COLUMN->SET_VISIBLE( ' ' ).
+        COLUMN = COLUMNS->GET_COLUMN( COLUMNNAME = 'PARVW' ).
+        COLUMN->SET_VISIBLE( ' ' ).
+      CATCH CX_SALV_NOT_FOUND.
+
+    ENDTRY.
+  ENDMETHOD.
+  METHOD GET_FUNCTIONS.
+    DATA: R_FUNCTIONS TYPE REF TO CL_SALV_FUNCTIONS_LIST.
+
+    TRY .
+        R_FUNCTIONS = R_GRID->GET_FUNCTIONS( ).
+      CATCH CX_SALV_MSG.
+
+    ENDTRY.
+    R_FUNCTIONS->SET_ALL( 'X' ).
+  ENDMETHOD.
+  METHOD GET_PARAMS.
+    CALL SELECTION-SCREEN 100.
+    IF SY-SUBRC = 0.
+      VBUKR  = P_VBUKR.
+      VKOKR  = P_VKOKR.
+      STAT   = P_STAT.
+      EXPATH = P_EXPATH.
+      PSPID[]  = S_PSPID[].
+      POSID[]  = S_POSID[].
+      POSKI[]  = S_POSKI[].
+      PRCTR[]  = S_PRCTR[].
+      PRART[]  = S_PRART[].
+    ENDIF.
+  ENDMETHOD.
+  METHOD SAVE_FILE.
+    DATA:
+      LV_ORIG_COST     TYPE STRING,
+      LV_CURR_BUDG     TYPE STRING,
+      LV_ORDR_COST     TYPE STRING,
+      LV_ACTL_COST     TYPE STRING,
+      LV_END_COST      TYPE STRING,
+      LV_FNAME TYPE STRING.
+
+    FIELD-SYMBOLS:
+      <FS_RESULT> TYPE SOLISTI1,
+      <FS_OUTPUT> TYPE _OUTPUT.
+    CREATE_CSV_HDR( ).
+
+
+    LOOP AT T_OUTPUT ASSIGNING <FS_OUTPUT>.
+      LV_ORIG_COST = <FS_OUTPUT>-ORIG_COST.
+      LV_CURR_BUDG = <FS_OUTPUT>-CURR_BUDG.
+
+      LV_ORDR_COST = <FS_OUTPUT>-ORDR_COST * 100.
+      CONCATENATE LV_ORDR_COST C_% INTO LV_ORDR_COST.
+      LV_ACTL_COST = <FS_OUTPUT>-ACTL_COST.
+      LV_END_COST  = <FS_OUTPUT>-END_COST.
+
+      APPEND INITIAL LINE TO I_RESULT ASSIGNING <FS_RESULT>.
+      CONCATENATE <FS_OUTPUT>-PROJ_PSPID
+                  <FS_OUTPUT>-PROJ_POST1
+                  <FS_OUTPUT>-POSID
+                  <FS_OUTPUT>-PRPS_POST1
+                  <FS_OUTPUT>-PARVW
+                  <FS_OUTPUT>-KUNNR
+                  <FS_OUTPUT>-PRPS_USR00
+                  LV_ORIG_COST
+                  LV_CURR_BUDG
+                  LV_ORDR_COST
+                  LV_ACTL_COST
+                  LV_END_COST
+                  <FS_OUTPUT>-PRCTR
+                  SY-DATUM
+                  <FS_OUTPUT>-PROJ_STAT
+                  <FS_OUTPUT>-TASK_STAT
+                  <FS_OUTPUT>-TASK_DATE INTO <FS_RESULT>-LINE SEPARATED BY C_SEP.
+
+      CLEAR:
+        LV_ORIG_COST,
+        LV_CURR_BUDG,
+        LV_ORDR_COST,
+        LV_ACTL_COST,
+        LV_END_COST.
+    ENDLOOP.
+
+    CLEAR LV_FNAME.
+    LV_FNAME = P_EXPATH.
+    IF LV_FNAME IS NOT INITIAL.
+*     To Download the Internal Table Data to Specified Location
+      CALL METHOD CL_GUI_FRONTEND_SERVICES=>GUI_DOWNLOAD
+        EXPORTING
+          FILENAME                  = LV_FNAME
+          FILETYPE                  = 'ASC'
+*         APPEND                    = 'X'
+          WRITE_FIELD_SEPARATOR     = 'X'
+*         HEADER                    = '00'
+*         TRUNC_TRAILING_BLANKS     = SPACE
+*         WRITE_LF                  = 'X'
+*         COL_SELECT                = SPACE
+*         COL_SELECT_MASK           = SPACE
+*         DAT_MODE                  = SPACE
+          CONFIRM_OVERWRITE         = 'X'   "SPACE
+*         NO_AUTH_CHECK             = SPACE
+*         CODEPAGE                  = SPACE
+*         IGNORE_CERR               = ABAP_TRUE
+*         REPLACEMENT               = '#'
+*         WRITE_BOM                 = SPACE
+          TRUNC_TRAILING_BLANKS_EOL = ''
+*         WK1_N_FORMAT              = SPACE
+*         WK1_N_SIZE                = SPACE
+*         WK1_T_FORMAT              = SPACE
+*         WK1_T_SIZE                = SPACE
+*        IMPORTING
+*         FILELENGTH                =
+        CHANGING
+          DATA_TAB                  = I_RESULT
+        EXCEPTIONS
+          FILE_WRITE_ERROR          = 1
+          NO_BATCH                  = 2
+          GUI_REFUSE_FILETRANSFER   = 3
+          INVALID_TYPE              = 4
+          NO_AUTHORITY              = 5
+          UNKNOWN_ERROR             = 6
+          HEADER_NOT_ALLOWED        = 7
+          SEPARATOR_NOT_ALLOWED     = 8
+          FILESIZE_NOT_ALLOWED      = 9
+          HEADER_TOO_LONG           = 10
+          DP_ERROR_CREATE           = 11
+          DP_ERROR_SEND             = 12
+          DP_ERROR_WRITE            = 13
+          UNKNOWN_DP_ERROR          = 14
+          ACCESS_DENIED             = 15
+          DP_OUT_OF_MEMORY          = 16
+          DISK_FULL                 = 17
+          DP_TIMEOUT                = 18
+          FILE_NOT_FOUND            = 19
+          DATAPROVIDER_EXCEPTION    = 20
+          CONTROL_FLUSH_ERROR       = 21
+          NOT_SUPPORTED_BY_GUI      = 22
+          ERROR_NO_GUI              = 23
+          OTHERS                    = 24.
+      IF SY-SUBRC <> 0.
+        LCL_LOG_UTILITY=>POPULATE_LOG( EXPORTING
+                                         I_TYPE   = C_I
+                                         I_CL     = C_MESS_CL
+                                         I_NUMBER = 003
+                                         I_PAR1   = SY-MSGV1
+                                         I_PAR2   = SY-MSGV2
+                                         I_PAR3   = SY-MSGV3
+                                         I_PAR4   = SY-MSGV4
+                                       CHANGING
+                                         C_LOG    = T_LOG ).
+        MESSAGE  S003(ZDW_DEV_OU) WITH 'File Successfully'(010) 'Downloaded to :'(011) LV_FNAME .
+      ENDIF.
+    ELSE.
+      MESSAGE  S001(ZDW_DEV_OU) WITH 'File not found'(012).
+    ENDIF.
+  ENDMETHOD.
+  METHOD WRITE_LOG.
+
+    CONSTANTS:
+      C_NO_DATA(29)    VALUE 'No valid data records to load'.
+
+    DATA:LV_RECORDS TYPE I,
+         LS_RETURN  TYPE BAPIRET2.
+
+    IF T_LOG IS INITIAL AND T_OUTPUT[] IS INITIAL.
+      LS_RETURN-TYPE = C_E.
+      LS_RETURN-MESSAGE = C_NO_DATA.
+      APPEND LS_RETURN TO T_LOG.
+    ENDIF.
+    LV_RECORDS = LINES(  T_OUTPUT[] ).
+    LCL_LOG_UTILITY=>WRITE_LOG( EXPORTING
+                                  I_PROG_LOG  = T_LOG
+                                  I_RECS      = LV_RECORDS
+                                  I_FILENAME1 = EXPATH ).
+
+
+  ENDMETHOD.
+ENDCLASS.
+CLASS CL_DBOBJECT_IO DEFINITION.
+  PUBLIC SECTION.
+    METHODS CONSTRUCTOR.
+    DATA:
+          T_PROJ  TYPE TABLE OF _PROJ,
+          T_PRPS  TYPE TABLE OF _PRPS,
+          T_PSTAT TYPE TABLE OF JEST,
+          T_TSTAT TYPE TABLE OF JEST,
+          T_TPART TYPE TABLE OF TPART,
+          T_KNA1  TYPE TABLE OF KNA1,
+          T_VBAP  TYPE TABLE OF VBAP,
+          T_VBPA  TYPE TABLE OF VBPA,
+          T_RPSCO TYPE TABLE OF _RPSCO,
+          T_TJ02T TYPE TABLE OF TJ02T,
+          T_COEP  TYPE TABLE OF COEP,
+          T_BPGE  TYPE TABLE OF BPGE,
+          T_BPHI  TYPE TABLE OF BPHI,
+          T_TCJ1T TYPE TABLE OF TCJ1T,
+          T_COOI  TYPE TABLE OF COOI.
+    DATA:
+          VBUKR TYPE PROJ-VBUKR,
+          VKOKR TYPE PROJ-VKOKR,
+          STAT  TYPE JEST-STAT,
+          PSPID TYPE RSELOPTION,
+          POSID TYPE RSELOPTION,
+          POSKI TYPE RSELOPTION,
+          PRCTR TYPE RSELOPTION,
+          PRART TYPE RSELOPTION,
+          COMP_NAME TYPE T880-NAME1,
+          EXPATH TYPE RLGRAP-FILENAME.
+ENDCLASS.
+CLASS CL_DBOBJECT_IO IMPLEMENTATION.
+  METHOD CONSTRUCTOR.
+    CLEAR:T_PROJ[],
+          T_PRPS[],
+          T_PSTAT[],
+          T_TSTAT[],
+          T_TPART[],
+          T_KNA1[],
+          T_VBAP[],
+          T_VBPA[],
+          T_RPSCO[],
+          T_TJ02T[],
+          T_COEP[],
+          T_BPGE[],
+          T_TCJ1T[],
+          T_COOI[],
+          VBUKR,
+          VKOKR,
+          STAT,
+          PSPID,
+          POSID,
+          POSKI,
+          PRCTR,
+          PRART.
+  ENDMETHOD.
+ENDCLASS.
+CLASS CL_PERSISTDB DEFINITION.
+  PUBLIC SECTION.
+    METHODS:
+     FETCH_DATA CHANGING RC_DATA TYPE REF TO CL_DBOBJECT_IO.
+ENDCLASS.
+
+CLASS CL_PERSISTDB IMPLEMENTATION.
+  METHOD FETCH_DATA.
+
+    DATA:
+      LV_COMPCODE    TYPE RCOMP_D.
+
+    UNPACK RC_DATA->VBUKR TO LV_COMPCODE.
+    SELECT SINGLE NAME1 INTO RC_DATA->COMP_NAME FROM T880
+      WHERE RCOMP = LV_COMPCODE.
+
+    IF RC_DATA->PSPID[] IS NOT INITIAL.
+      SELECT VBUKR VKOKR PSPNR PSPID POST1 PLSEZ OBJNR FROM PROJ
+        INTO CORRESPONDING FIELDS OF TABLE RC_DATA->T_PROJ
+        WHERE PSPID IN RC_DATA->PSPID AND
+              VBUKR  = RC_DATA->VBUKR AND
+              VKOKR  = RC_DATA->VKOKR.
+
+      SELECT POSID POSKI PRCTR PRART POST1 PSPHI OBJNR USR00 PSPNR ERDAT STUFE FROM PRPS
+        INTO CORRESPONDING FIELDS OF TABLE RC_DATA->T_PRPS
+        FOR ALL ENTRIES IN RC_DATA->T_PROJ
+        WHERE PSPHI  = RC_DATA->T_PROJ-PSPNR AND
+              PRCTR IN RC_DATA->PRCTR      AND
+              PRART IN RC_DATA->PRART      AND
+              POSKI IN RC_DATA->POSKI.
+    ELSE.
+      IF RC_DATA->POSID[] IS NOT INITIAL.
+        SELECT POSID POSKI PRCTR PRART POST1 PSPHI OBJNR USR00 PSPNR ERDAT STUFE
+          FROM PRPS
+          INTO CORRESPONDING FIELDS OF TABLE RC_DATA->T_PRPS
+          WHERE POSID IN RC_DATA->POSID  AND
+                PRCTR IN RC_DATA->PRCTR  AND
+                PRART IN RC_DATA->PRART  AND
+                POSKI IN RC_DATA->POSKI.
+
+        SELECT VBUKR VKOKR PSPNR PSPID POST1 PLSEZ OBJNR
+          FROM PROJ
+          INTO CORRESPONDING FIELDS OF TABLE RC_DATA->T_PROJ
+          FOR ALL ENTRIES IN RC_DATA->T_PRPS
+          WHERE PSPNR  = RC_DATA->T_PRPS-PSPHI AND
+                VBUKR  = RC_DATA->VBUKR      AND
+                VKOKR  = RC_DATA->VKOKR.
+
+        SELECT POSID POSKI PRCTR PRART POST1 PSPHI OBJNR USR00 PSPNR ERDAT STUFE
+          FROM PRPS
+          INTO CORRESPONDING FIELDS OF TABLE RC_DATA->T_PRPS
+          FOR ALL ENTRIES IN RC_DATA->T_PROJ
+          WHERE PSPHI  = RC_DATA->T_PROJ-PSPNR AND
+                PRCTR IN RC_DATA->PRCTR      AND
+                PRART IN RC_DATA->PRART      AND
+                POSKI IN RC_DATA->POSKI.
+      ELSE.
+        IF RC_DATA->POSKI IS NOT INITIAL.
+          SELECT POSID POSKI PRCTR PRART POST1 PSPHI OBJNR USR00 PSPNR ERDAT STUFE
+            FROM PRPS
+            INTO CORRESPONDING FIELDS OF TABLE RC_DATA->T_PRPS
+            WHERE POSKI IN RC_DATA->POSKI  AND
+                  PRCTR IN RC_DATA->PRCTR  AND
+                  PRART IN RC_DATA->PRART.
+
+          SELECT VBUKR VKOKR PSPNR PSPID POST1 PLSEZ OBJNR FROM PROJ
+            INTO CORRESPONDING FIELDS OF TABLE RC_DATA->T_PROJ
+            FOR ALL ENTRIES IN RC_DATA->T_PRPS
+            WHERE PSPNR  = RC_DATA->T_PRPS-PSPHI AND
+                  VBUKR  = RC_DATA->VBUKR      AND
+                  VKOKR  = RC_DATA->VKOKR.
+
+          SELECT POSID POSKI PRCTR PRART POST1 PSPHI OBJNR USR00 PSPNR ERDAT STUFE
+            FROM PRPS
+            INTO CORRESPONDING FIELDS OF TABLE RC_DATA->T_PRPS
+            FOR ALL ENTRIES IN RC_DATA->T_PROJ
+            WHERE PSPHI  = RC_DATA->T_PROJ-PSPNR AND
+                  PRCTR IN RC_DATA->PRCTR      AND
+                  PRART IN RC_DATA->PRART      AND
+                  POSKI IN RC_DATA->POSKI.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+
+    IF RC_DATA->T_PROJ IS NOT INITIAL.
+      SELECT * FROM JEST
+        INTO TABLE RC_DATA->T_PSTAT
+        FOR ALL ENTRIES IN RC_DATA->T_PROJ
+        WHERE OBJNR = RC_DATA->T_PROJ-OBJNR
+        .
+    ENDIF.
+
+    IF RC_DATA->T_PRPS IS NOT INITIAL.
+      SELECT * FROM JEST
+        INTO TABLE RC_DATA->T_TSTAT
+        FOR ALL ENTRIES IN RC_DATA->T_PRPS
+        WHERE OBJNR = RC_DATA->T_PRPS-OBJNR
+        .
+
+      SELECT OBJNR WRTTP GJAHR VORGA VERSN BELTP WLP00
+        FROM RPSCO
+        INTO TABLE RC_DATA->T_RPSCO
+        FOR ALL ENTRIES IN RC_DATA->T_PRPS
+        WHERE OBJNR = RC_DATA->T_PRPS-OBJNR.
+
+      SELECT *
+        FROM TPART
+        INTO TABLE RC_DATA->T_TPART
+        ORDER BY SPRAS PARVW.
+
+      SELECT *
+        FROM VBAP
+        INTO TABLE RC_DATA->T_VBAP
+        FOR ALL ENTRIES IN RC_DATA->T_PRPS
+        WHERE PS_PSP_PNR = RC_DATA->T_PRPS-PSPNR.
+
+      SELECT *
+        FROM VBPA
+        INTO TABLE RC_DATA->T_VBPA
+        FOR ALL ENTRIES IN RC_DATA->T_VBAP
+        WHERE VBELN = RC_DATA->T_VBAP-VBELN.
+
+      SELECT *
+        FROM KNA1
+        INTO TABLE RC_DATA->T_KNA1.
+
+      SELECT * FROM TJ02T INTO TABLE RC_DATA->T_TJ02T.
+
+      SELECT *
+        FROM COEP
+        INTO TABLE RC_DATA->T_COEP
+        FOR ALL ENTRIES IN RC_DATA->T_PRPS
+        WHERE OBJNR = RC_DATA->T_PRPS-OBJNR AND
+              KOKRS = P_VKOKR
+        .
+
+      SELECT *
+        FROM BPGE
+        INTO TABLE RC_DATA->T_BPGE
+        FOR ALL ENTRIES IN RC_DATA->T_PRPS
+        WHERE OBJNR = RC_DATA->T_PRPS-OBJNR.
+
+      SELECT *
+        FROM COOI
+        INTO TABLE RC_DATA->T_COOI
+        FOR ALL ENTRIES IN RC_DATA->T_PRPS
+        WHERE OBJNR = RC_DATA->T_PRPS-OBJNR
+        .
+
+      SELECT *
+        FROM TCJ1T
+        INTO TABLE RC_DATA->T_TCJ1T
+        FOR ALL ENTRIES IN RC_DATA->T_PRPS
+        WHERE PRART = RC_DATA->T_PRPS-PRART.
+
+      SELECT * FROM BPHI
+        INTO TABLE RC_DATA->T_BPHI
+       FOR ALL ENTRIES IN RC_DATA->T_PRPS
+       WHERE OBJNR = RC_DATA->T_PRPS-OBJNR AND
+             WRTTP = C_01.
+    ENDIF.
+  ENDMETHOD.
+ENDCLASS.
+
+CLASS CL_MODEL DEFINITION.
+  PUBLIC SECTION.
+    METHODS:
+      CONSTRUCTOR,
+      ACCESS_DATA      RETURNING VALUE(RVAL) TYPE BOOLEAN,
+      TBL_CONT_MSGS,
+      SORT_TABLE,
+      BUILD_OUTPUT,
+      CHECK_FOR_ERRORS IMPORTING VALUE(T_ERRTAB) TYPE BAPIRET2_T
+                       RETURNING VALUE(RVAL) TYPE BOOLEAN,
+      FILTER_WBS_ELEMS IMPORTING I_STR1 TYPE ANY
+                                 I_STR2 TYPE ANY
+                       RETURNING VALUE(RVAL) TYPE BOOLEAN,
+      GET_CUSTDATA     IMPORTING I_STR1  TYPE ANY
+                       EXPORTING E_KUNNR TYPE NAME1_GP
+                                 E_PARVW TYPE VTXTK,
+      GET_STATTXT       IMPORTING I_TASK TYPE J_OBJNR OPTIONAL
+                                  I_PROJ TYPE J_OBJNR OPTIONAL
+                        RETURNING VALUE(RVAL) TYPE J_STEXT,
+      GET_ACTUALS       IMPORTING I_VAR  TYPE ANY
+                        CHANGING  I_STR1 TYPE ANY,
+
+      GET_ORDERED       IMPORTING I_VAR  TYPE ANY
+                        CHANGING  I_STR1 TYPE ANY,
+
+      GET_VERSION       IMPORTING I_STR1 TYPE ANY
+                        RETURNING VALUE(RVAL) TYPE I,
+      CONV_ELEMENTS     CHANGING STR1 TYPE ANY,
+      CHECK_VALUES     IMPORTING I_STR TYPE ANY
+                       RETURNING VALUE(RVAL) TYPE BOOLEAN.
+    DATA:
+        R_DB_IO TYPE REF TO CL_DBOBJECT_IO,
+        R_PERSIST_DB TYPE REF TO CL_PERSISTDB,
+        T_LOG TYPE TABLE OF BAPIRET2,
+        V_ERROR_CHECK,
+        V_RECORDS TYPE I,
+        T_OUTPUT TYPE TABLE OF _OUTPUT.
+  PRIVATE SECTION.
+    METHODS:
+      DB_CALL CHANGING RC_DATA TYPE REF TO CL_DBOBJECT_IO.
+ENDCLASS.
+CLASS CL_MODEL IMPLEMENTATION.
+  METHOD CONSTRUCTOR.
+    CREATE OBJECT R_DB_IO.
+  ENDMETHOD.
+  METHOD CHECK_FOR_ERRORS.
+
+    FIELD-SYMBOLS:
+      <FS_ILOG> TYPE BAPIRET2.
+
+    CLEAR RVAL.
+    LOOP AT T_ERRTAB ASSIGNING <FS_ILOG>.
+      IF <FS_ILOG>-TYPE = C_E.
+        RVAL = C_YES.
+        RETURN.
+      ENDIF.
+    ENDLOOP.
+
+  ENDMETHOD.
+  METHOD ACCESS_DATA.
+    DB_CALL( CHANGING RC_DATA = R_DB_IO ).
+    SORT_TABLE(  ).
+    RVAL = CHECK_FOR_ERRORS( EXPORTING T_ERRTAB = T_LOG ).
+  ENDMETHOD.
+  METHOD CONV_ELEMENTS.
+
+    FIELD-SYMBOLS:
+      <STR>  TYPE _OUTPUT.
+
+    ASSIGN STR1 TO <STR>.
+    CALL FUNCTION 'CONVERSION_EXIT_PROJN_OUTPUT'
+      EXPORTING
+        INPUT  = <STR>-PROJ_PSPID
+      IMPORTING
+        OUTPUT = <STR>-PROJ_PSPID.
+
+    CALL FUNCTION 'CONVERSION_EXIT_PROJN_OUTPUT'
+      EXPORTING
+        INPUT  = <STR>-POSID
+      IMPORTING
+        OUTPUT = <STR>-POSID.
+
+  ENDMETHOD.
+  METHOD FILTER_WBS_ELEMS.
+
+    DATA:
+      V_POS1  TYPE STRING,
+      V_POS2  TYPE STRING,
+      V_POS3  TYPE STRING,
+      V_WBS   TYPE PS_POSID,
+      V_WLP00 TYPE BP_WPL,
+      V_CONTR TYPE I,
+      LV_VERSION       TYPE BP_VERSION,
+      S_STR   TYPE _PRPS.
+
+    FIELD-SYMBOLS:
+      <FS_RPSCO> TYPE _RPSCO,
+      <FS_TASK>  LIKE LINE OF ME->R_DB_IO->T_TSTAT.
+
+    S_STR = I_STR1.
+    CALL FUNCTION 'CONVERSION_EXIT_ABPSP_OUTPUT'
+      EXPORTING
+        INPUT  = S_STR-PSPNR
+      IMPORTING
+        OUTPUT = V_WBS.
+**********************************************************************
+***WBS element A.XXXXXXX.002.XXX or E.XXXXXXX.002.XXX
+**********************************************************************
+    SPLIT V_WBS AT C_PERIOD INTO V_POS1 V_POS2.
+    IF V_POS1 = C_E OR V_POS1 = C_A.
+      CLEAR:
+        V_POS1.
+      SPLIT V_POS2 AT C_PERIOD INTO V_POS1 V_POS3.
+      IF V_POS3(3) = C_002.
+
+*        V_CONTR = V_CONTR + 1.
+***Check Status
+
+        READ TABLE ME->R_DB_IO->T_TSTAT ASSIGNING <FS_TASK> WITH KEY OBJNR = S_STR-OBJNR
+                                                                     BINARY SEARCH.
+        IF SY-SUBRC = 0.
+          IF ( <FS_TASK>-STAT = C_I0045 AND <FS_TASK>-INACT = C_X ) OR
+             ( <FS_TASK>-STAT = C_I0046 AND <FS_TASK>-INACT = C_X ).
+            RVAL = C_NO.
+          ELSE.
+            RVAL = C_YES.
+          ENDIF.
+        ELSE.
+          RVAL = C_NO.
+        ENDIF.
+*        IF V_CONTR IS INITIAL.
+*          RVAL = C_NO.
+*        ENDIF.
+      ELSE.
+        RVAL = C_NO.
+      ENDIF.
+    ELSE.
+      RVAL = C_NO.
+    ENDIF.
+
+  ENDMETHOD.
+  METHOD GET_CUSTDATA.
+
+    DATA:
+      S_STR   TYPE _PRPS.
+    FIELD-SYMBOLS:
+      <TPART> TYPE TPART,
+      <KNA1>  TYPE KNA1,
+      <VBAP>  TYPE VBAP,
+      <VBPA>  TYPE VBPA.
+
+    S_STR = I_STR1.
+    READ TABLE ME->R_DB_IO->T_VBAP
+      ASSIGNING <VBAP>
+      WITH KEY PS_PSP_PNR = S_STR-PSPNR
+      BINARY SEARCH.
+    IF SY-SUBRC = 0.
+      READ TABLE ME->R_DB_IO->T_VBPA
+        ASSIGNING <VBPA>
+        WITH KEY VBELN = <VBAP>-VBELN
+        BINARY SEARCH.
+      IF SY-SUBRC = 0.
+        READ TABLE ME->R_DB_IO->T_TPART
+          ASSIGNING <TPART> WITH KEY SPRAS = SY-LANGU
+                                     PARVW = <VBPA>-PARVW
+          BINARY SEARCH.
+        IF SY-SUBRC = 0.
+          E_PARVW = <TPART>-VTEXT.
+        ENDIF.
+        READ TABLE ME->R_DB_IO->T_KNA1
+          ASSIGNING <KNA1> WITH KEY KUNNR = <VBPA>-KUNNR
+          BINARY SEARCH.
+        IF SY-SUBRC = 0.
+          E_KUNNR = <KNA1>-NAME1.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+  ENDMETHOD.
+  METHOD GET_ACTUALS.
+
+    DATA:
+      LV_OBJNR TYPE J_OBJNR.
+
+    FIELD-SYMBOLS:
+      <S_STR>       TYPE _OUTPUT,
+      <COEP>        TYPE COEP.
+
+    LV_OBJNR = I_VAR.
+    ASSIGN I_STR1 TO <S_STR>.
+    LOOP AT ME->R_DB_IO->T_COEP
+         ASSIGNING <COEP>
+         WHERE OBJNR = LV_OBJNR.
+      <S_STR>-ACTL_COST = <S_STR>-ACTL_COST + <COEP>-WTGBTR.
+    ENDLOOP.
+
+
+  ENDMETHOD.
+  METHOD GET_ORDERED.
+    DATA:
+      LV_OBJNR TYPE J_OBJNR.
+
+    FIELD-SYMBOLS:
+      <S_STR>       TYPE _OUTPUT,
+      <BPGE>        TYPE BPGE,
+      <COOI>        TYPE COOI.
+
+    LV_OBJNR = I_VAR.
+    ASSIGN I_STR1 TO <S_STR>.
+    LOOP AT ME->R_DB_IO->T_COOI ASSIGNING <COOI> WHERE OBJNR = LV_OBJNR.
+      <S_STR>-ORDR_COST = <S_STR>-ORDR_COST + <COOI>-WHGBTR.
+    ENDLOOP.
+    <S_STR>-ORDR_COST = <S_STR>-ORDR_COST + <S_STR>-ACTL_COST.
+
+  ENDMETHOD.
+  METHOD GET_STATTXT.
+    FIELD-SYMBOLS:
+      <FS_TASK>     TYPE JEST,
+      <TJ02T>    TYPE TJ02T.
+
+    DATA:
+      LV_ANW_STAT_EXISTING TYPE  XFELD,
+      LV_E_STSMA TYPE J_STSMA,
+      LV_LINE    TYPE J_STEXT,
+      LV_STAT  TYPE J_STATUS,
+      LV_STONR   TYPE J_STONR.
+
+
+    IF I_TASK IS NOT INITIAL.
+      READ TABLE ME->R_DB_IO->T_TSTAT ASSIGNING <FS_TASK> WITH KEY OBJNR = I_TASK
+                                                    STAT  = C_I0043 BINARY SEARCH.
+      IF SY-SUBRC = 0 AND <FS_TASK>-INACT IS INITIAL.
+        LV_STAT = C_I0043.
+      ELSE.
+        READ TABLE ME->R_DB_IO->T_TSTAT ASSIGNING <FS_TASK> WITH KEY OBJNR = I_TASK
+                                                    STAT  = C_I0067 BINARY SEARCH.
+        IF SY-SUBRC = 0 AND <FS_TASK>-INACT IS INITIAL.
+          LV_STAT = C_I0067.
+        ELSE.
+          CALL FUNCTION 'STATUS_TEXT_EDIT'
+            EXPORTING
+              OBJNR             = I_TASK
+              SPRAS             = SY-LANGU
+            IMPORTING
+              ANW_STAT_EXISTING = LV_ANW_STAT_EXISTING
+              E_STSMA           = LV_E_STSMA
+              LINE              = LV_LINE
+              USER_LINE         = RVAL
+              STONR             = LV_STONR.
+          IF RVAL IS INITIAL.
+            RVAL = LV_LINE.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+    ELSEIF I_PROJ IS NOT INITIAL.
+      CALL FUNCTION 'STATUS_TEXT_EDIT'
+        EXPORTING
+          OBJNR             = I_PROJ
+          SPRAS             = SY-LANGU
+        IMPORTING
+          ANW_STAT_EXISTING = LV_ANW_STAT_EXISTING
+          E_STSMA           = LV_E_STSMA
+          LINE              = LV_LINE
+          USER_LINE         = RVAL
+          STONR             = LV_STONR.
+    ELSE.
+      READ TABLE ME->R_DB_IO->T_TJ02T ASSIGNING <TJ02T> WITH KEY ISTAT = LV_STAT
+                                                    SPRAS = SY-LANGU BINARY SEARCH.
+      IF SY-SUBRC = 0.
+        RVAL = <TJ02T>-TXT30.
+      ENDIF.
+    ENDIF.
+  ENDMETHOD.
+  METHOD GET_VERSION.
+
+    DATA:
+      LV_DTYP(4),
+      LS_STR   TYPE _PROJ.
+
+    FIELD-SYMBOLS:
+      <FS_BPHI>  TYPE BPHI.
+
+    LS_STR = I_STR1.
+
+    LOOP AT  ME->R_DB_IO->T_BPHI ASSIGNING <FS_BPHI>.
+      CALL FUNCTION 'NUMERIC_CHECK'
+        EXPORTING
+          STRING_IN = <FS_BPHI>-VERSN
+        IMPORTING
+          HTYPE     = LV_DTYP.
+
+      IF LV_DTYP = C_NUMC.
+        RVAL = <FS_BPHI>-VERSN.
+      ENDIF.
+      CLEAR LV_DTYP.
+    ENDLOOP.
+  ENDMETHOD.
+  METHOD SORT_TABLE.
+    SORT ME->R_DB_IO->T_PSTAT BY OBJNR STAT.
+    SORT ME->R_DB_IO->T_TSTAT BY OBJNR STAT.
+    SORT ME->R_DB_IO->T_RPSCO BY OBJNR WRTTP GJAHR VORGA VERSN BELTP WLP00.
+    SORT ME->R_DB_IO->T_TPART BY SPRAS PARVW.
+    SORT ME->R_DB_IO->T_VBAP BY PS_PSP_PNR.
+    SORT ME->R_DB_IO->T_VBPA BY VBELN.
+    SORT ME->R_DB_IO->T_VBPA BY VBELN.
+    SORT ME->R_DB_IO->T_TJ02T BY ISTAT SPRAS.
+    SORT ME->R_DB_IO->T_COEP BY OBJNR.
+    SORT ME->R_DB_IO->T_BPGE BY OBJNR WRTTP.
+    SORT ME->R_DB_IO->T_COOI BY OBJNR.
+    SORT ME->R_DB_IO->T_TCJ1T BY PRART.
+    SORT ME->R_DB_IO->T_BPHI BY VERSN DESCENDING.
+  ENDMETHOD.
+  METHOD DB_CALL.
+    CREATE OBJECT R_PERSIST_DB.
+    R_PERSIST_DB->FETCH_DATA( CHANGING RC_DATA = R_DB_IO ).
+  ENDMETHOD.
+  METHOD TBL_CONT_MSGS.
+    IF R_DB_IO->T_PRPS IS INITIAL.
+      LCL_LOG_UTILITY=>POPULATE_LOG( EXPORTING
+                                       I_TYPE   = C_E
+                                       I_CL     = C_MESS_CL
+                                       I_NUMBER = 013
+                                     CHANGING
+                                       C_LOG    = T_LOG ).
+    ENDIF.
+    IF R_DB_IO->T_PROJ IS INITIAL.
+      LCL_LOG_UTILITY=>POPULATE_LOG( EXPORTING
+                                       I_TYPE   = C_E
+                                       I_CL     = C_MESS_CL
+                                       I_NUMBER = 014
+                                     CHANGING
+                                       C_LOG    = T_LOG ).
+    ENDIF.
+  ENDMETHOD.
+  METHOD BUILD_OUTPUT.
+
+    DATA:
+      LV_KEEP_RECORD   TYPE BOOLEAN,
+      LV_POSID         TYPE PS_POSID,
+      LV_STATUS        TYPE J_STATUS,
+      LV_ORD_COST      TYPE BP_WPL,
+      LS_LVL_ONE       TYPE _OUTPUT,
+      LV_VERSION       TYPE BP_VERSION.
+
+    FIELD-SYMBOLS:
+      <FS_PRPS>    LIKE LINE OF R_DB_IO->T_PRPS,
+      <FS_RPSCO>     TYPE _RPSCO,
+      <FS_OUTPUT>  LIKE LINE OF T_OUTPUT,
+      <FS_TCJ1T>   LIKE LINE OF R_DB_IO->T_TCJ1T,
+      <FS_PROJ>    LIKE LINE OF R_DB_IO->T_PROJ.
+
+    LOOP AT ME->R_DB_IO->T_PROJ ASSIGNING <FS_PROJ>.
+      CLEAR:
+        LV_KEEP_RECORD,
+        LS_LVL_ONE.
+
+      LOOP AT ME->R_DB_IO->T_PRPS ASSIGNING <FS_PRPS>
+           WHERE PSPHI = <FS_PROJ>-PSPNR.
+        LV_KEEP_RECORD = FILTER_WBS_ELEMS( I_STR1 = <FS_PRPS>
+                                          I_STR2 = <FS_PROJ> ).
+        IF LV_KEEP_RECORD = C_YES.
+***Keep record...
+***Use this as a holding place for level one for summation
+          IF <FS_PRPS>-STUFE = C_1.
+            LS_LVL_ONE-POSID = <FS_PRPS>-POSID.
+          ENDIF.
+          APPEND INITIAL LINE TO T_OUTPUT ASSIGNING <FS_OUTPUT>.
+          READ TABLE ME->R_DB_IO->T_TCJ1T
+            ASSIGNING <FS_TCJ1T>
+            WITH KEY PRART = <FS_PRPS>-PRART
+            BINARY SEARCH.
+          IF SY-SUBRC = 0.
+            <FS_OUTPUT>-PROJ_TYPE  = <FS_TCJ1T>-PRATX.
+          ENDIF.
+          <FS_OUTPUT>-COMP_NAME  = ME->R_DB_IO->COMP_NAME.
+          CLEAR LV_STATUS.
+          LV_STATUS = GET_STATTXT( I_TASK = <FS_PRPS>-OBJNR ).
+          <FS_OUTPUT>-TASK_STAT = LV_STATUS(1).
+          CLEAR LV_STATUS.
+          LV_STATUS = GET_STATTXT( I_PROJ = <FS_PROJ>-OBJNR ).
+          <FS_OUTPUT>-PROJ_STAT = LV_STATUS(1).
+          <FS_OUTPUT>-TASK_DATE   = <FS_PRPS>-ERDAT.
+          <FS_OUTPUT>-PROJ_PSPID  = <FS_PROJ>-PSPID.
+          <FS_OUTPUT>-PROJ_POST1  = <FS_PROJ>-POST1.
+***Replace comma with nothing. C_NO is ''.
+          REPLACE ALL OCCURRENCES OF C_COMMA
+            IN <FS_OUTPUT>-PROJ_POST1
+            WITH C_NO.
+          <FS_OUTPUT>-PROJ_PLSEZ  = <FS_PROJ>-PLSEZ.
+***Sales Price
+          READ TABLE ME->R_DB_IO->T_RPSCO
+            ASSIGNING <FS_RPSCO>
+            WITH KEY OBJNR = <FS_PRPS>-OBJNR
+                    WRTTP = C_01
+                    GJAHR = C_0000
+                    VORGA = C_KSTR
+                    VERSN = C_ZERO
+                    BELTP = C_2
+            BINARY SEARCH.
+          IF SY-SUBRC = 0.
+            <FS_OUTPUT>-SLS_PRICE = <FS_RPSCO>-WLP00.
+          ENDIF.
+          <FS_OUTPUT>-PRPS_USR00  = <FS_PRPS>-USR00.
+          <FS_OUTPUT>-PRPS_POSKI  = <FS_PRPS>-POSKI.
+          <FS_OUTPUT>-PRPS_POST1  = <FS_PRPS>-POST1.
+
+***Original Cost
+          READ TABLE ME->R_DB_IO->T_RPSCO
+            ASSIGNING <FS_RPSCO>
+            WITH KEY OBJNR = <FS_PRPS>-OBJNR
+                    WRTTP = C_01
+                    VORGA = C_KSTP
+                    VERSN = C_001
+                    BELTP = C_1
+            BINARY SEARCH.
+          IF SY-SUBRC = 0.
+            IF <FS_PRPS>-POSID = LS_LVL_ONE-POSID.
+              "THIS SHOULD BE CLEAR FOR LEVEL ONE, BUT JUST INCASE IT IS NOT
+              CLEAR <FS_RPSCO>-WLP00.
+            ENDIF.
+            <FS_OUTPUT>-ORIG_COST = <FS_RPSCO>-WLP00.
+            LS_LVL_ONE-ORIG_COST  = LS_LVL_ONE-ORIG_COST + <FS_OUTPUT>-ORIG_COST.
+          ENDIF.
+
+***Current Budget
+          LV_VERSION = GET_VERSION( <FS_PROJ> ).
+          UNPACK LV_VERSION TO LV_VERSION.
+          READ TABLE ME->R_DB_IO->T_RPSCO
+            ASSIGNING <FS_RPSCO>
+            WITH KEY OBJNR = <FS_PRPS>-OBJNR
+                    WRTTP = C_01
+                    VORGA = C_KSTP
+                    VERSN = LV_VERSION
+                    BELTP = C_1
+            BINARY SEARCH.
+          IF SY-SUBRC = 0.
+            IF <FS_PRPS>-POSID = LS_LVL_ONE-POSID.
+              "THIS SHOULD BE CLEAR FOR LEVEL ONE, BUT JUST INCASE IT IS NOT
+              CLEAR <FS_RPSCO>-WLP00.
+            ENDIF.
+            <FS_OUTPUT>-CURR_BUDG  = <FS_RPSCO>-WLP00.
+            LS_LVL_ONE-CURR_BUDG  = LS_LVL_ONE-CURR_BUDG + <FS_OUTPUT>-CURR_BUDG.
+          ENDIF.
+
+***Projected End Cost
+          READ TABLE ME->R_DB_IO->T_RPSCO
+            ASSIGNING <FS_RPSCO>
+            WITH KEY OBJNR = <FS_PRPS>-OBJNR
+                    WRTTP = C_01
+                    VORGA = C_KSTP
+                    VERSN = C_ZERO
+                    BELTP = C_1
+            BINARY SEARCH.
+          IF SY-SUBRC = 0.
+            IF <FS_PRPS>-POSID = LS_LVL_ONE-POSID.
+              "THIS SHOULD BE CLEAR FOR LEVEL ONE, BUT JUST INCASE IT IS NOT
+              CLEAR <FS_RPSCO>-WLP00.
+            ENDIF.
+            <FS_OUTPUT>-END_COST  = <FS_RPSCO>-WLP00.
+            LS_LVL_ONE-END_COST  = LS_LVL_ONE-END_COST + <FS_OUTPUT>-END_COST.
+          ENDIF.
+          IF <FS_PRPS>-STUFE = C_1.
+            "LEVEL ONE
+          ELSE.
+            GET_ACTUALS( EXPORTING I_VAR  = <FS_PRPS>-OBJNR
+                         CHANGING  I_STR1 = <FS_OUTPUT> ).
+            LS_LVL_ONE-ACTL_COST  = LS_LVL_ONE-ACTL_COST + <FS_OUTPUT>-ACTL_COST.
+
+            GET_ORDERED( EXPORTING I_VAR  = <FS_PRPS>-OBJNR
+                         CHANGING  I_STR1 = <FS_OUTPUT> ).
+            LS_LVL_ONE-ORDR_COST    = LS_LVL_ONE-ORDR_COST + <FS_OUTPUT>-ORDR_COST.
+          ENDIF.
+
+***Ordered Percent
+          CLEAR LV_ORD_COST.
+          IF <FS_OUTPUT>-END_COST IS NOT INITIAL.
+            LV_ORD_COST = ( <FS_OUTPUT>-ORDR_COST / <FS_OUTPUT>-END_COST ) * 100.
+            WRITE LV_ORD_COST TO <FS_OUTPUT>-ORDR_PERC DECIMALS 2 RIGHT-JUSTIFIED.
+            CONCATENATE  <FS_OUTPUT>-ORDR_PERC C_% INTO <FS_OUTPUT>-ORDR_PERC.
+          ELSE.
+            WRITE LV_ORD_COST TO <FS_OUTPUT>-ORDR_PERC DECIMALS 2 RIGHT-JUSTIFIED.
+            CONCATENATE  <FS_OUTPUT>-ORDR_PERC C_% INTO <FS_OUTPUT>-ORDR_PERC.
+          ENDIF.
+
+***Cur Budget Less Actual Cost
+          <FS_OUTPUT>-CURR_ACTL = <FS_OUTPUT>-ORIG_COST - <FS_OUTPUT>-ORDR_COST.
+
+          <FS_OUTPUT>-VBUKR = P_VBUKR.
+          <FS_OUTPUT>-VKOKR = P_VKOKR.
+          <FS_OUTPUT>-PSPNR = <FS_PROJ>-PSPNR.
+          <FS_OUTPUT>-POSID = <FS_PRPS>-POSID.
+          <FS_OUTPUT>-PRCTR = <FS_PRPS>-PRCTR.
+          <FS_OUTPUT>-PSPHI = <FS_PRPS>-PSPHI.
+          <FS_OUTPUT>-OBJNR = <FS_PROJ>-OBJNR.
+          CONV_ELEMENTS( CHANGING STR1 = <FS_OUTPUT> ).
+          GET_CUSTDATA(  EXPORTING
+                               I_STR1 = <FS_PRPS>
+                         IMPORTING
+                               E_PARVW = <FS_OUTPUT>-PARVW
+                               E_KUNNR = <FS_OUTPUT>-KUNNR ).
+
+          CLEAR: LV_KEEP_RECORD.
+          IF <FS_PRPS>-STUFE <> C_1.
+            LV_KEEP_RECORD = CHECK_VALUES( <FS_OUTPUT> ).
+            IF LV_KEEP_RECORD = C_NO.
+              LV_POSID = <FS_OUTPUT>-POSID.
+              UNASSIGN <FS_OUTPUT>.
+              READ TABLE T_OUTPUT ASSIGNING <FS_OUTPUT>
+                WITH KEY POSID = LV_POSID.
+              IF SY-SUBRC = 0.
+                DELETE T_OUTPUT INDEX SY-TABIX.
+                CONTINUE.
+              ENDIF.
+            ENDIF.
+          ENDIF.
+        ELSE.
+          CONTINUE.
+        ENDIF.
+      ENDLOOP.
+
+      CALL FUNCTION 'CONVERSION_EXIT_PROJN_OUTPUT'
+        EXPORTING
+          INPUT  = LS_LVL_ONE-POSID
+        IMPORTING
+          OUTPUT = LS_LVL_ONE-POSID.
+      SORT T_OUTPUT BY POSID.
+      READ TABLE T_OUTPUT
+        ASSIGNING <FS_OUTPUT>
+        WITH KEY POSID = LS_LVL_ONE-POSID.
+      IF SY-SUBRC = 0.
+        <FS_OUTPUT>-ORIG_COST = LS_LVL_ONE-ORIG_COST.
+        <FS_OUTPUT>-CURR_BUDG = LS_LVL_ONE-CURR_BUDG.
+        <FS_OUTPUT>-END_COST  = LS_LVL_ONE-END_COST.
+        <FS_OUTPUT>-ACTL_COST = LS_LVL_ONE-ACTL_COST.
+        <FS_OUTPUT>-ORDR_COST = LS_LVL_ONE-ORDR_COST.
+
+        CLEAR LV_ORD_COST.
+        IF LS_LVL_ONE-END_COST IS NOT INITIAL.
+          LV_ORD_COST = ( LS_LVL_ONE-ORDR_COST / LS_LVL_ONE-END_COST ) * 100.
+          WRITE LV_ORD_COST TO <FS_OUTPUT>-ORDR_PERC DECIMALS 2 RIGHT-JUSTIFIED.
+          CONCATENATE  <FS_OUTPUT>-ORDR_PERC C_% INTO <FS_OUTPUT>-ORDR_PERC.
+        ELSE.
+          WRITE LV_ORD_COST TO <FS_OUTPUT>-ORDR_PERC DECIMALS 2 RIGHT-JUSTIFIED.
+          CONCATENATE  <FS_OUTPUT>-ORDR_PERC C_% INTO <FS_OUTPUT>-ORDR_PERC.
+        ENDIF.
+*        <FS_OUTPUT>-ORDR_PERC = LS_LVL_ONE-ORDR_COST / LS_LVL_ONE-END_COST.
+        <FS_OUTPUT>-CURR_ACTL = LS_LVL_ONE-ORIG_COST - LS_LVL_ONE-ORDR_COST.
+      ENDIF.
+    ENDLOOP.
+    DESCRIBE TABLE T_OUTPUT LINES V_RECORDS.
+  ENDMETHOD.
+  METHOD CHECK_VALUES.
+    DATA:
+      S_STR  TYPE _OUTPUT.
+    S_STR = I_STR.
+    IF S_STR-ORIG_COST IS INITIAL AND
+       S_STR-CURR_BUDG IS INITIAL AND
+       S_STR-END_COST  IS INITIAL AND
+       S_STR-ACTL_COST IS INITIAL AND
+       S_STR-ORDR_COST IS INITIAL AND
+       S_STR-SLS_PRICE IS INITIAL.
+      RVAL = C_NO.
+    ELSE.
+      RVAL = C_YES.
+    ENDIF.
+  ENDMETHOD.
+ENDCLASS.
+CLASS CL_MAINCLS DEFINITION.
+  PUBLIC SECTION.
+    METHODS: CONSTRUCTOR,
+                   START.
+    DATA: R_CL_MODEL TYPE REF TO CL_MODEL,
+          R_CL_VIEW  TYPE REF TO CL_VIEW.
+
+ENDCLASS.
+CLASS CL_MAINCLS IMPLEMENTATION.
+  METHOD CONSTRUCTOR.
+    CREATE OBJECT: R_CL_MODEL,R_CL_VIEW.
+  ENDMETHOD.
+  METHOD START.
+    R_CL_VIEW->GET_PARAMS( IMPORTING
+        VBUKR = R_CL_MODEL->R_DB_IO->VBUKR
+        VKOKR = R_CL_MODEL->R_DB_IO->VKOKR
+        STAT = R_CL_MODEL->R_DB_IO->STAT
+        EXPATH = R_CL_MODEL->R_DB_IO->EXPATH
+        PSPID = R_CL_MODEL->R_DB_IO->PSPID[]
+        POSID = R_CL_MODEL->R_DB_IO->POSID[]
+        POSKI = R_CL_MODEL->R_DB_IO->POSKI[]
+        PRCTR = R_CL_MODEL->R_DB_IO->PRCTR[]
+        PRART = R_CL_MODEL->R_DB_IO->PRART[] ).
+    CHECK R_CL_MODEL->ACCESS_DATA( ) <> C_YES.
+    R_CL_MODEL->BUILD_OUTPUT( ).
+    IF SY-BATCH IS INITIAL.
+      R_CL_VIEW->DISPLAY_GRID( EXPORTING T_OP = R_CL_MODEL->T_OUTPUT ).
+    ELSE.
+      R_CL_VIEW->SAVE_FILE( IMPORTING T_LOG = R_CL_MODEL->T_LOG  ).
+    ENDIF.
+  ENDMETHOD.
+ENDCLASS.
+DATA LCL_MAIN TYPE REF TO CL_MAINCLS.
+
+INITIALIZATION.
+  CREATE OBJECT LCL_MAIN.
+
+AT SELECTION-SCREEN.
+  IF SY-BATCH IS NOT INITIAL.
+    LCL_MAIN->R_CL_VIEW->VALIDATE_FILENAME( ).
+  ENDIF.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR P_EXPATH.
+  LCL_MAIN->R_CL_VIEW->F4_HELP_FILENAME( CHANGING EXPATH = P_EXPATH ).
+
+START-OF-SELECTION.
+
+  LCL_MAIN->START( ).
+
+END-OF-SELECTION.
+  LCL_MAIN->R_CL_VIEW->WRITE_LOG( EXPORTING EXPATH = P_EXPATH ).
